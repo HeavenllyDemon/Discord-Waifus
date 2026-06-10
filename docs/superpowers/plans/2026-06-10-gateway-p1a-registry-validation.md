@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Scaffold the `@starlight-ai/gateway` repo and build its data-driven core: the capability registry (54 researched docs, route-overlay resolution) and the validation/constraint engine that rejects or adjusts requests per model quirks.
+**Goal:** Scaffold the `@waifucave/gateway` repo and build its data-driven core: the capability registry (54 researched docs, route-overlay resolution) and the validation/constraint engine that rejects or adjusts requests per model quirks.
 
 **Architecture:** Capability docs are JSON data shipped with the package (`data/*.json`, one file per company, produced by P0 research). A loader indexes them by `(providerId, modelId)` and resolves per-route overlays (base URLs, context limits, OpenRouter `supportedParameters` filtering). A pure constraint engine evaluates declarative `when/then` rules (`forbid`/`drop`/`force`/`clamp`), and a request validator combines descriptor checks (type/range/enum/maxItems) with the constraint engine. No runtime dependencies; zod is dev-only (schema test that gates the data files). P1b (codecs/transport/client) and P1c (HTTP server/drift sync) build on this and get their own plans.
 
 **Tech Stack:** TypeScript (ESM, NodeNext, strict), Node ≥ 20, Vitest, zod (devDependency only).
 
-**Repo location:** `/Users/karimjadvji/Xcode progects/starlight-gateway` (sibling of `Discord Waifus`; pushed later to `starlight-ai/gateway`). All commands below run from that directory unless stated otherwise.
+**Repo location:** `/Users/karimjadvji/Xcode progects/waifucave-gateway` (sibling of `Discord Waifus`; pushed later to `waifucave/gateway`). All commands below run from that directory unless stated otherwise.
 
 **Context docs:** `Discord Waifus/MIGRATION_PLAN.md` (§4 gateway design, Table B providers), `Discord Waifus/research/p0-capability-docs/` (the 15 data files + findings.md).
 
@@ -17,8 +17,8 @@
 ## File structure
 
 ```
-starlight-gateway/
-├── package.json                 # @starlight-ai/gateway, ESM, zero runtime deps
+waifucave-gateway/
+├── package.json                 # @waifucave/gateway, ESM, zero runtime deps
 ├── tsconfig.json                # NodeNext, strict, src → dist
 ├── vitest.config.ts
 ├── .gitignore
@@ -63,8 +63,8 @@ Responsibilities: `types.ts` is the single type authority (schema.ts mirrors it;
 - [ ] **Step 1: Create directory and git init**
 
 ```bash
-mkdir -p "/Users/karimjadvji/Xcode progects/starlight-gateway"
-cd "/Users/karimjadvji/Xcode progects/starlight-gateway"
+mkdir -p "/Users/karimjadvji/Xcode progects/waifucave-gateway"
+cd "/Users/karimjadvji/Xcode progects/waifucave-gateway"
 git init -b main
 ```
 
@@ -72,7 +72,7 @@ git init -b main
 
 ```json
 {
-  "name": "@starlight-ai/gateway",
+  "name": "@waifucave/gateway",
   "version": "0.0.0",
   "description": "Provider-agnostic LLM normalization layer: capability registry, parameter validation, unified chat API",
   "license": "MIT",
@@ -149,7 +149,7 @@ Expected: installs cleanly; TypeScript ≥ 5.6 reported.
 
 ```bash
 git add package.json tsconfig.json vitest.config.ts .gitignore package-lock.json
-git commit -m "chore: scaffold @starlight-ai/gateway package"
+git commit -m "chore: scaffold @waifucave/gateway package"
 ```
 
 ---
@@ -162,7 +162,7 @@ git commit -m "chore: scaffold @starlight-ai/gateway package"
 - [ ] **Step 1: Copy data verbatim from the Discord Waifus repo**
 
 ```bash
-cd "/Users/karimjadvji/Xcode progects/starlight-gateway"
+cd "/Users/karimjadvji/Xcode progects/waifucave-gateway"
 mkdir -p data docs
 cp "/Users/karimjadvji/Xcode progects/Discord Waifus/research/p0-capability-docs/"*.json data/
 cp "/Users/karimjadvji/Xcode progects/Discord Waifus/research/p0-capability-docs/findings.md" docs/research-findings.md
@@ -1440,7 +1440,7 @@ git commit -m "feat: define public package exports"
 
 ## Execution record (2026-06-10)
 
-**P1a COMPLETE and signed off** — 16 commits on `starlight-gateway` main (root `39da171` → `1219374`), 32 tests green, typecheck/build clean, `npm pack` produces a working 19.3kB artifact. Executed subagent-driven with two-stage review per task. Notable deviations from this plan, all reviewer-driven:
+**P1a COMPLETE and signed off** — 16 commits on `waifucave-gateway` main (root `39da171` → `1219374`), 32 tests green, typecheck/build clean, `npm pack` produces a working 19.3kB artifact. Executed subagent-driven with two-stage review per task. Notable deviations from this plan, all reviewer-driven:
 
 - `meta.availability?: string` added to types/schema (23 docs carry it; my data audit missed it).
 - Mistral `toolChoice: "any"` normalized out of `data/mistral.json` (redundant alias of `required`). **The gateway repo's `data/` is now authoritative**; `research/p0-capability-docs/` in this repo is a historical snapshot.
