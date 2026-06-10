@@ -1438,6 +1438,23 @@ git commit -m "feat: define public package exports"
 
 ---
 
+## Execution record (2026-06-10)
+
+**P1a COMPLETE and signed off** — 16 commits on `starlight-gateway` main (root `39da171` → `1219374`), 32 tests green, typecheck/build clean, `npm pack` produces a working 19.3kB artifact. Executed subagent-driven with two-stage review per task. Notable deviations from this plan, all reviewer-driven:
+
+- `meta.availability?: string` added to types/schema (23 docs carry it; my data audit missed it).
+- Mistral `toolChoice: "any"` normalized out of `data/mistral.json` (redundant alias of `required`). **The gateway repo's `data/` is now authoritative**; `research/p0-capability-docs/` in this repo is a historical snapshot.
+- Loader: provider-scoped dotted params (e.g. `google.safetySettings`) are now DROPPED on routes with `supportedParameters` (the plan's escape hatch let them leak onto OpenRouter routes). Duplicate-route warning diagnostics added.
+- Validator: pseudo-param injection now shadow-restores real params (OpenAI/Moonshot carry a genuine `responseFormat` map param the strip was silently eating).
+- `RouteOverrides.maxOutputTokens` is `number | null`; recursive condition schema typed `z.ZodType<ConstraintCondition>`.
+
+**P1b carryover (from final review, non-blocking):**
+1. Google wire seam: `baseUrl + endpoint` is NOT a complete URL for `google-generative-language` — transport must build `{baseUrl}/v1beta/models/{modelId}:generateContent` (+ `:streamGenerateContent`), branching on `wire`. Add a `buildUrl(model)` helper.
+2. Packaging: `dist/registry/schema.js` (zod import) ships in the tarball; deep-importers/bundlers could trip. Carve it out of the published build.
+3. Constraint engine: `force`/`drop`/`clamp` on injected pseudo-params is discarded by shadow-restore (no data rule does this today) — add a guard/test if such a rule appears.
+4. Consider exporting `ParamType`/`Confidence` if codecs need to switch on descriptor types.
+5. P1b client must gate on `ok` before consuming `effectiveParams` (documented on the type).
+
 ## Self-review notes (completed during planning)
 
 - **Spec coverage vs MIGRATION_PLAN P1:** registry ✅ (Tasks 2–6), validate ✅ (7–8); codecs/transport/client → P1b plan; server/sync → P1c plan. P1 exit criteria split accordingly: P1a's slice is "registry loads 54 docs, validation pins the Table A quirks that exist in data".
