@@ -2773,3 +2773,28 @@ await app.register(gatewayPlugin, {
 - **Judgment calls encoded above:** unknown model is 404 at the HTTP layer (resolved *before* the gateway call) while other gateway errors keep their taxonomy mapping; mid-stream failures stay 200-SSE error events while pre-I/O failures become statuses (the probe boundary is exactly `gateway.stream()`'s throw/yield contract); 499 for client aborts (nginx convention, valid Response status); the fastify plugin is subpath-only to keep the optional peer explicit; sync severity = error (missing id) / warning (drift, unreachable list) / info (registry diagnostics) with `ok` failing on warnings too because §4.7's job is flagging stale docs; google id compare strips the `models/` prefix; OpenRouter pricing compared per-MTok after `toFixed(6)` rounding on both sides.
 - **Counts:** expected totals per task are stated in each "Expected" line (155 → ~216 by Task 8). If a count differs by ±1 because vitest groups differently, verify the listed behaviors are all present instead of trusting the number.
 - **Subagent execution notes:** include the FULL task text in every subagent prompt; two-stage review per task (spec, then quality); independently verify every implementer report (run the tests yourself — a P1a subagent fabricated a report); fix-first findings get fixed before moving on; commits to `main` directly, push only after final review.
+
+---
+
+## Execution record (2026-06-11)
+
+**P1c COMPLETE and signed off** — 16 commits on `waifucave-gateway` main (`e9a2532` → `27b0def`, pushed to GitHub), **224 tests green** (was 155), typecheck/build clean, tarball install-smoked twice (implementer + controller independently): main entry + `./fastify` subpath import with NO fastify in node_modules, `npx gateway --help` exit 0, packaged `serve({port:0})` answers `/v1/models` with all 100 routes. Final integration review probed all five endpoints live over a socket (200/200/200/200/401-without-creds) plus 404/405/400 envelope consistency and the SSE first-event probe (401 JSON, not a 200 SSE). Executed subagent-driven with two-stage review per task; every implementer report verified independently (no fabrications this round). P1b carryovers #2 (documented, body unbounded), #3 (499 normalization + jsdoc), #5 (responses/google wires now integration-tested through the server) all landed.
+
+The P1 exit criterion from MIGRATION_PLAN §8 — "`gateway serve` answers all 5 endpoints" — is met. **P1 (a+b+c) is done.**
+
+Notable reviewer-driven deviations from this plan:
+
+- **shared:** `errorResponse`'s 500 fallback never throws (try/catch around `String(error)` for pathological objects — matches the `extractErrorMessage` invariant).
+- **handler routing:** `pathSegments` try/catches `decodeURIComponent` — malformed percent-encoding (e.g. `%E0%A4%A`) 404s instead of escaping as a raw `URIError` 500 through Fastify/node mounts.
+- **handler chat boundary:** two added guards — bare-string `responseFormat` is 400-rejected on `/v1/chat` (it bypassed validation: the gateway checks `responseFormat?.type`, the codec truthy-checks, producing a malformed wire body); non-array `tools` is 400-rejected (raw codec TypeError surfaced as a misleading 500). `/v1/validate` still accepts the string form per plan.
+- **streaming 499:** the plan's claim that a pre-aborted signal rejects the first `next()` was WRONG — `fetchWithRetry`'s pre-flight abort throw lands inside `gateway.stream`'s try/catch and becomes an error *event*. Fixed with an explicit pre-abort guard at the top of `streamingChat`. Also pinned: an error event arriving into an orphaned pull after consumer cancel is rejection-free (WHATWG stream machinery absorbs it — reviewer reproduced from first principles).
+- **sync:** google pagination is now bounded (50-page cap + repeated-token guard → `failure` → warning). The unbounded version was reproduced as a real OOM crash (~4 GB) under a token-repeating fake. `gateway sync --data-dir <missing>` exits 1 with a clean message instead of an ENOENT stack trace.
+- **packaging fact:** `dist/server/fastify.d.ts` legitimately contains the type-only fastify import; the dep-free check greps `--include="*.js"` only.
+
+**P2 / follow-up carryover (from reviews, non-blocking):**
+1. Codecs throw raw `TypeError`s (not `GatewayError("invalid_request")`) for malformed message/tool *elements* — the handler guards top-level shapes, but bad elements still surface as 500s. Codec-level hardening is a P1b-layer follow-up.
+2. `fastify.ts` prefix strip: a bare-prefix request with a query string (`/api/llm?x=1`) slices to `?x=1` → 404. Harmless (no gateway route lives at the root), noted for completeness.
+3. The 499 client-abort body reuses `kind:"network"` — distinguishable from upstream 502s only by status code. Acceptable; revisit only if a consumer needs to branch on kind.
+4. `readBody` in node.ts is unbounded (local tooling, 127.0.0.1) and post-listen `server.on("error")` is unhandled — file with P6 hardening if the standalone server ever grows beyond local tooling.
+5. `version: "0.0.0"` — bump at P6 publish time (`@waifucave/gateway@0.1.0` per MIGRATION_PLAN §8).
+6. Sync's native list-endpoint shapes (Anthropic/Google/openai-compatible) remain not live-verified — first real `gateway sync` run with keys should confirm; parser fixes come with fixtures, never loosened tolerance. Scheduled drift-check CI is P6.
