@@ -906,3 +906,23 @@ git commit -m "chore: block publishing with file: deps; document gateway dep wor
 - Include the FULL task text in every subagent prompt; two-stage review per task (spec compliance, then code quality); independently verify every implementer report (run the tests yourself — a P1a subagent once fabricated a report); fix-first findings get fixed before moving on.
 - Test-count expectations (369 → 373 → 379 → 381) assume no concurrent landings; the prompting-overhaul workstream commits to this repo. If counts drift, verify the listed behaviors are present instead of trusting numbers, and check `git log` for what landed.
 - The goldens in Tasks 3–4 are P1c-pinned against gateway `27b0def`. If one mismatches, print the live response: registry data is authoritative — fix the expectation, never the data, and record the drift in your report.
+
+---
+
+## Execution record (2026-06-12)
+
+**P2 COMPLETE and signed off** — 5 implementation commits on app-repo `main` (`fa87860` → `7ba5444`), **382 tests green** (was 369), both tsconfigs + `build:backend` clean, gateway repo untouched at `27b0def`, zero diffs under `src/providers/`/`src/orchestration/`/`src/shared/schemas/`. Exit criteria pinned by tests: `/api/llm/v1/models` serves all 100 registry routes through the mount; `/api/models` carries 23 legacy + 100 gateway models; `/api/providers` carries 6 legacy + 14 gateway providers; chat traffic untouched (pipelines/runtime tests unchanged and green). Executed subagent-driven with two-stage review per task; every implementer report verified independently (no fabrications; all five reported accurately). Not all P1c goldens needed adjustment — zero drift against `27b0def`.
+
+Reviewer-driven deviations from this plan (all folded into the task commits):
+
+- **Task 2 (quality):** lookup uses the dedicated `userDataPath` helper instead of `resolveDataPath(dataRoot, "user", ...)`; added a 5th test pinning that `__proto__`/`constructor`/`toString` lookups don't resolve prototype-chain properties as credentials (verified harmless by review, now regression-pinned). Suite totals shifted +1 vs the plan (374/380/382).
+- **Task 4 (quality):** `GatewayProviderListing` is now `ProviderDef & { credentialConfigured: boolean }` reusing the gateway's exported type (was a hand-redeclared 6-field type); `llmRegistryJson`'s parameter renamed `path` → `endpoint` (shadowed the `node:path` module import); the providers-proxy test now also pins credential LIVENESS through `/api/providers`' `gatewayProviders` (PUT key → `credentialConfigured: true` on the proxy's own handler instance, not just the plugin's).
+- **Task 5 (quality, Important — the one real catch):** the plan wired the publish guard only into `prepublishOnly`, but the repo's actual release path (`release:beta` → `validateAndPack` `npm pack` → workflow `npm publish <tarball>`, `.github/workflows/npm-root-package.yml:73`) never runs `prepublishOnly` — `npm pack` triggers prepack/prepare only, and publishing a pre-built tarball runs no lifecycle scripts. Fixed: `scripts/release.mjs` `validateAndPack()` now invokes the guard first (its `run()` throws on exit 1), with `prepublishOnly` kept as the manual-publish backstop; CLAUDE.md corrected to match. Re-review verified cwd/ordering/throw semantics.
+- **Final integration review (SHIP):** guard spread extended with `...pkg.peerDependencies` (blind-spot completeness; folded into the docs commit).
+
+**P3 / follow-up carryovers (from reviews, non-blocking):**
+1. Dual registry load at startup: the plugin builds its own handler and the proxies build a second (`createGatewayHandler` ×2 → `Registry.load()` ×2). Conscious P2 trade; when P3 routes real chat through the gateway, consider one shared instance (e.g., a gateway option to pass a pre-built handler to the plugin).
+2. Deep-equal goldens + hardcoded counts (100/14/23/6) in `tests/api.test.ts` break on every gateway registry change — accepted house tradeoff (data drift SHOULD draw eyes), noted so the breakage is unsurprising.
+3. `file:` symlink fragility: P3's runtime dependence on the gateway raises the cost of a stale `../waifucave-gateway/dist` — workflow documented in CLAUDE.md.
+4. P1c carryovers #1 (codec TypeErrors → 500s through the mount for malformed message elements), #2 (bare-prefix+query 404), #3 (499 reuses kind "network"), #6 (sync list-endpoint shapes not live-verified) remain open, unchanged by P2.
+5. In P2 only the 6 legacy provider ids can hold stored keys (`ProviderIdSchema` frozen until P4), so `/api/llm/v1/chat` is live-usable for those 6 direct routes; the other 8 gateway providers stay `credentialConfigured: false` until P4.
