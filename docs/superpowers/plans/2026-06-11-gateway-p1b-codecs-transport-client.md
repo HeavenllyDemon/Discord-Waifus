@@ -3929,3 +3929,27 @@ git push origin main
 - **Type consistency spot-checks:** `EncodedRequest` carries `warnings: Warning[]` (Task 4) and every codec `encode` returns it; `fetchWithRetry(provider, request, options)` matches `HttpRequest`'s `{url, headers, body}` which is structurally satisfied by `EncodedRequest` (extra `warnings` key is fine for TS structural typing — the client passes `encoded` directly); `decodeStream` is an `AsyncGenerator` satisfying the `AsyncIterable` interface member; `toWarnings` maps `ConstraintWarning.code` (`dropped|forced|clamped`) exhaustively; `validateRequest` is called with `responseFormat: request.responseFormat?.type` matching its `"json_object" | "json_schema" | undefined` input.
 - **Judgment calls encoded above:** OpenRouter dialect table lives in `shared.ts` (structural property of the route surface, not a codec branch per model); `thinking.type` boolean→string transform keyed on the wireName, scoped so qwen's `enable_thinking` stays boolean; Anthropic `responseFormat` throws rather than guessing an unverified wire field; Anthropic `max_tokens` defaults to `min(limit, 4096)` and thinking budget to 1024 with a max_tokens bump (documented invariants, pinned by tests); Google `functionResponse` matches by name via an id→name map built from prior toolCall blocks, erroring on unknown ids; synthesized tool-call ids are deterministic (`call_<ordinal>`).
 - **Subagent execution notes:** include the FULL task text in every subagent prompt; two-stage review per task; independently verify every implementer report (run the tests yourself — a P1a subagent fabricated a report). Tests count per task is stated in each "Expected" line; if a count differs by ±1 because vitest groups differently, verify the listed behaviors are all present instead of trusting the number.
+
+---
+
+## Execution record (2026-06-11)
+
+**P1b COMPLETE and signed off** — 20 commits on `waifucave-gateway` main (`8f41a2e` → `66b1617`, pushed to GitHub), **155 tests green**, typecheck/build clean, tarball verified zod-free with a real install-and-import smoke. Executed subagent-driven with two-stage review per task; every implementer report verified independently (no fabrications this round). All 5 P1a carryovers landed (Tasks 1, 4, 9).
+
+Notable reviewer-driven deviations from this plan:
+
+- **errors:** `extractErrorMessage` never throws (try/catch around `JSON.stringify` for unserializable bodies) + strictness fix for `noUncheckedIndexedAccess`.
+- **transport:** retryable 429/5xx response bodies are now `cancel()`ed before retrying (undici socket leak); backoff sleep is abort-aware; Retry-After empty/negative guards.
+- **shared:** `setPath` throws on `__proto__`/`constructor`/`prototype` path segments (wireNames are registry-controlled; 4× codec blast radius); `applyPassthrough` pinned by tests.
+- **openai-chat:** assistant messages without `tool_calls` keep string content (`""`), never `content:null` (OpenAI/DeepSeek 400 on null-without-tools).
+- **openai-responses:** truncated streams (no `response.completed`) synthesize a `done` event with `finishReason:"error"` (Codec contract).
+- **anthropic-messages:** empty text blocks/turns dropped (Anthropic 400s on empty content); truncation trusts a `stop_reason` captured from `message_delta` (message_stop is just the envelope).
+- **google:** unconditional thought re-encode documented (Gemini 3 signature round-trip, intentionally not gated on `reasoningRoundTrip`); `thoughtSignature` on functionCall parts is DROPPED (ToolCallBlock has no signature field) — pinned as a known-lossy test.
+- **client:** `chat()` guards against literal JSON `null`/scalar bodies (raw TypeError escaped the taxonomy); anthropic-wire integration test added.
+
+**P1c / app-integration carryover (from final review, non-blocking):**
+1. Gemini 3 functionCall `thoughtSignature` drop — if live tool loops need it, `ToolCallBlock` gains a `signature` field (P2/P3).
+2. `fetchWithRetry` `timeoutMs` covers time-to-headers only — the P1c HTTP server must not assume it bounds a whole stream.
+3. chat/stream abort asymmetry: pre-aborted `chat()` rejects with the raw abort reason; `stream()` wraps aborts as `error` events of kind `network`. Normalize or document in P1c.
+4. Known data gaps from the plan header (Anthropic adaptive thinking, thinking×sampling force, DeepSeek `reasoning_effort` riding along when thinking disabled, `thinking.redacted` suspicious wireName) remain registry-data follow-ups, not code.
+5. Client-level integration tests cover openai-chat + anthropic wires; responses/google are unit-tested only — add when the P1c server exercises them.
