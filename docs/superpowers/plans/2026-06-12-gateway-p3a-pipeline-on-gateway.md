@@ -1223,3 +1223,21 @@ Expected: suite ≥ 620 passed | 15 skipped (count is indicative — verify beha
 - The plan pins goldens from the registry at gateway `c279736`. Mismatch → print live output → fix the TEST (registry/data authoritative), record drift.
 - Where a step says "read the current implementation and mirror it", the implementer MUST open pipelines.ts at the cited region before writing — behavior parity with today's wire bodies is the contract; the untouched pipelines.test.ts plus the new goldens are the dual referee.
 - Concurrent workstreams may land; `git status` before commits; counts are indicative.
+
+---
+
+## Execution record (2026-06-13)
+
+**P3a COMPLETE and signed off** — 7 commits (`eddd5af` → `06112c6`), **631 passed | 15 skipped** (was 593+15), typecheck + `build:backend` clean, gateway repo untouched, `tests/pipelines.test.ts` + `tests/runtime.test.ts` byte-identical throughout (the referee held). All six ModelPipeline methods live on the gateway client behind `createGatewayModelPipeline` (unused by production until P3b). Subagent-driven, two-stage review per task, all implementer reports verified independently.
+
+Reviewer-driven deviations folded into task commits:
+- **T2:** pre-conform guard — the reasoning-disable remedy only fires when the model HAS `reasoning.enabled` (prevents loop churn + misleading non-convergence error on models where forced tools are unsupported outright); `import type` consistency; 2 extra policy-edge tests.
+- **T3:** registry says deepseek `multipleSystemMessages: false` (verified cell) → the new builder sends `<system_note>` user turns where legacy sends real mid-conversation system turns. Reviewer ruled the NEW behavior more correct than legacy; **P3b cutover smoke must eyeball a live DeepSeek prompt**.
+- **T5:** queryLog parity restored (reply bodies via `response.clone()` fire-and-forget; query body top-level so the allowlist captures fields) — without this the dashboard Replies/Queries tabs would have gone blank for gateway calls.
+- **T6:** Critical parity catch — the legacy `/run` guard (`replyRequired` ⇒ must reply) was missing; added + ZodError wrapping in `parseForcedCall` + reviewer `maxOutputTokens ?? 64` default. `topP` deliberately NOT added to decision sampling (legacy parity).
+- **T6 re-pin:** deepseek emits `reasoning_effort` from the registry DEFAULT even with thinking disabled — known P1b data carryover, harmless (provider ignores it), not a pre-conform bug.
+- **Final review (the big catch):** gateway `decideDream` parsed Gemini's FLAT ops with the nested schema — every `add`/`promote`/`merge`/`rewrite` from Gemini would have thrown at P3b cutover. The T8 golden missed it because `decay` is shape-identical flat vs nested. Fixed by moving legacy's `normalizeDreamOp`/`RawDreamOpSchema` (+ raw observation coercion for stringified importance) to tools.ts, used by BOTH pipelines; flat `add`/`promote` goldens added (`06112c6`).
+
+**Found, NOT fixed (out of P3a scope — pre-existing W3 bug in main):** `RawStageManagerObservationSchema` has no `entities` field, and ALL FOUR legacy protocol classes parse observations through it (zod strips unknown keys) → **model-provided observation `entities` are silently discarded in production today**, despite the observer tool schema requesting them (W3 "observer gains entities"). The gateway pipeline mirrors this for parity. One-line fix candidate (add `entities: z.array(z.string()).optional()` to the raw schema in tools.ts) — belongs to the overhaul owner's call since it changes live W3 behavior.
+
+**P3b carryovers:** cutover wiring (call sites construct via providerId+modelId from config + legacy-id map for gpt-4o/gpt-4o-mini/glm-5-turbo/gemini-3.5-flash), /api/models legacy-field rewire, deletions (pipelines.ts, catalog.ts + their tests), frontend ReasoningControls literals, live smoke incl. DeepSeek prompt-shape eyeball + Gemini dream `add` op live.
