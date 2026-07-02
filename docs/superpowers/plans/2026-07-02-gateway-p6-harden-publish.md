@@ -103,3 +103,21 @@ Four contracts, TDD each:
 
 ### Final review
 Whole-range, both repos, base = this plan's parent commit (app) and pre-T1 HEAD (gateway); ledger Minors triaged; the §7.3-supersession + endpoint-removal breaking changes called out for sign-off.
+
+---
+
+## Execution record (2026-07-02)
+
+**Status: complete.** Gateway `4740540`→`fa6c4c1` (pushed, v0.1.1 published — user-confirmed trigger of the npm-package workflow, run 28586654506 success, `npm view` shows 0.1.0+0.1.1). App `88102b1`→`bdd3378` + docs.
+
+- **T1 (gateway)** `61038aa` + fix `33606d8` — malformed-element 400s (review upgraded the premise: most cases were silently mis-encoded 200s, not 500s; review also caught that block validation had to be ROLE-scoped — user+toolCall / assistant+image were still mis-encoding, reproduced live and fixed), LICENSE, v0.1.1. 247 gateway tests.
+- **T2 (gateway)** `0a6cd2a` + fix `662314c` — CI: test / live drift (14 credentialEnv secrets mapped, keyless runs check openrouter only) / publish-freshness guard (all three branches locally exercised; review's diagnostics minor fixed with guarded network/parse steps).
+- **Data** `fa6c4c1` — the CI's FIRST live run failed its drift job legitimately: 2 stale openrouter routes (owl-alpha, xiaomi/mimo-v2-flash gone upstream — verified against the live list) removed; 14 pricing cells synced to live values (incl. 6 the initial truncated output hid). Second CI run: all three jobs green.
+- **T3 (app)** `88102b1` — `/api/models` deleted; `/api/providers` = credentials-status over all 14 registry providers (byte-identical keyHint redaction, docsUrl static map) + `gatewayProviders`; `legacyCatalog.ts` → `providerStatus.ts`; Dashboard/Setup/Providers views adjusted. Review PASS (security trace: no full key reaches any response).
+- **T4 (app)** `765e0d4` — four write contracts: explicit-null unset (schemas + shallow `pruneUndefined` in both merges + views send null), normalize-legacy-ids-on-write (all three persist sites store the resolved target — deliberate supersession of P4's store-literal deviation), personaDigest omitted on create, DiscordBots `enabled` required. Review: zero findings (empirical probes incl. the null+normalize interaction).
+- **T5 (app)** `76b431a` — TagListField blur/save race PROVEN NON-BUG by tracing shipped react-dom 19.2.6: blur and click are both discrete-priority; blur's updates flush synchronously before click dispatches and React reads handlers off the updated fiber. Comment-only.
+- **T6** publish + pin: user confirmed; workflow success; app pin `2788ad6` → real `npm ci` install (symlink DEAD, `check-no-file-deps` passes); one count pin updated (`bdd3378` — registry 100→98 after the stale-route removal); **653 passed | 15 skipped against the published package**.
+- **T7** live `gateway sync` with real keys (anthropic/openai/google/deepseek/xai): shapes parsed clean on every reachable provider — P1c #6 closed; xai /models 403 (account-side, warning only). Headless smoke on a live-root copy: `/api/models` 404, 14-provider credentials-status, SPA served, normalize-on-write (gpt-4o → openai/gpt-5-mini), null-unset round-trip. Smoke also confirmed BY DESIGN: switching a config's model 400s when stored params don't fit the new model (strict §11.9 write validation; the SPA's live-validate gating walks users through clearing them) — raw API callers must clear params in the same PUT.
+- CLAUDE.md gateway section rewritten for the post-migration reality (pinned registry dep, npm link for local gateway dev, PATCH-schema rule, CI expectations).
+
+**The migration (P0–P6) is COMPLETE.** Remaining known items, all user-decision or account-side: lumi's unresolvable model; gemini-2.0-flash catalog removal; anthropic responseFormat codec gap (no UI consumer; §11); xai /models 403; deepseek balance; SPA visual pass (P5) still pending.
