@@ -4,7 +4,7 @@
 
 **Goal:** A backend assistant agent — its own config slot, a chat API with SSE, a gateway tool loop, and a self-REST tool registry that reads and directly writes app state — plus the API additions (`/api/logs`, `/api/docs*`) that make the whole app operable by any external agent.
 
-**Architecture:** The assistant is a fourth agent config (`user/assistant/config.json`) resolved to the orchestrator's model when unset. Chat turns run through a new `generateAssistantTurn` on `GatewayModelPipeline`: a tool loop over `gateway.chat` (toolChoice auto) with an injected `executeTool` callback. Tools dispatch in-process to the app's own Fastify handlers via `app.inject`, so zod bodies, `gateway.validate()` 400s, and `expectedRevision` 412s all apply unchanged; writes are read-modify-write with one 412 retry. Conversations are in-memory (LRU), with per-conversation SSE.
+**Architecture:** The assistant is a fourth agent config (`user/assistant/config.json`) resolved to the orchestrator's model when unset. Chat turns run through a new `generateAssistantTurn` on `GatewayModelPipeline`: a tool loop over `gateway.chat` (toolChoice auto) with an injected `executeTool` callback. Tools dispatch in-process to the app's own Fastify handlers via `app.inject`, so zod bodies, `gateway.validate()` 400s, and `expectedRevision` 409s all apply unchanged; writes are read-modify-write with one 412 retry. Conversations are in-memory (LRU), with per-conversation SSE.
 
 **Tech Stack:** TypeScript ESM (NodeNext — `.js` import specifiers), Fastify, Zod, `@waifucave/gateway` 0.1.5, Vitest.
 
@@ -13,7 +13,7 @@
 - Spec: `docs/superpowers/specs/2026-07-04-dashboard-redesign-design.md` (Phase 1 section is normative).
 - Agent writes are DIRECT — no proposal/approval layer.
 - Provider API keys are write-only to the agent (list shows redacted status; no read-back).
-- All new endpoints mirror existing error conventions (`conflict()` 412, zod 400s).
+- All new endpoints mirror existing error conventions (`conflict()` 409, zod 400s).
 - `dist/` is generated — never edit; backend changes need `npm run build:backend` for the shipped CLI.
 - Tests use isolated temp roots via `tests/testUtils.ts` helpers.
 
@@ -551,14 +551,14 @@ async function inject(ctx: AssistantToolContext, options: { method: "GET"|"PUT"|
 }
 
 // Read-modify-write for revisioned resources: GET → caller merges → PUT with expectedRevision;
-// one retry on 412 with a fresh GET.
+// one retry on 409 with a fresh GET.
 async function revisionedPut(ctx: AssistantToolContext, url: string, merge: (current: Record<string, unknown>) => Record<string, unknown>): Promise<string> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const current = await inject(ctx, { method: "GET", url });
     if (current.status !== 200) return `GET ${url} failed: ${current.body}`;
     const parsed = JSON.parse(current.body) as Record<string, unknown>;
     const result = await inject(ctx, { method: "PUT", url, payload: { ...merge(parsed), expectedRevision: parsed.revision } });
-    if (result.status !== 412) return result.body;
+    if (result.status !== 409) return result.body;
   }
   return "Conflict: the resource changed twice while I was writing. Try again.";
 }
